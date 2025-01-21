@@ -3,6 +3,8 @@ import gzip
 from datetime import datetime
 from multiprocessing import Pool
 from time import perf_counter_ns
+import os
+import numpy as np
 
 def parse_timestamp(timestamp_str):
     formats = ["%Y-%m-%d %H:%M:%S.%f UTC",
@@ -71,10 +73,13 @@ def process_csv(file_path, start_time, end_time, chunk_size=100000):
             if not chunk:
                 break # No more rows
             
-            # Process chunk
-            with Pool() as pool:
-                chunk_results = pool.starmap(process_chunk, [(chunk_part, start_time, end_time) for chunk_part in [chunk]])
+            chunk_parts = np.array_split(chunk, os.cpu_count())
 
+            # Multiprocessing
+            with Pool() as pool:
+                chunk_results = pool.starmap(
+                    process_chunk, [(chunk_part, start_time, end_time) for chunk_part in chunk_parts]
+)
             # Merge chunk results
             chunk_color_count, chunk_pixel_count = merge_results(chunk_results)
 
