@@ -73,6 +73,7 @@ def convert_to_parquet(input_folder, output_file, batch_size=512 * 1024**2):
 
 def clean_final_parquet(final_parquet_file):
     conn = duckdb.connect()
+
     conn.execute(f"""
     CREATE TABLE election_data AS 
     SELECT DISTINCT * FROM read_parquet('{final_parquet_file}')
@@ -81,10 +82,25 @@ def clean_final_parquet(final_parquet_file):
     AND LOWER(TRIM(precinct)) NOT LIKE '%total%'
     """)
 
+    conn.execute("""
+    CREATE TABLE cleaned_election_data AS 
+    SELECT DISTINCT RIGHT(TRIM(state), 2) AS state, precinct, year, office, votes,
+        CASE 
+            WHEN LOWER(TRIM(party)) IN ('r', 'rep', 'republican') THEN 'Republican'
+            WHEN LOWER(TRIM(party)) IN ('d', 'dem', 'democrat', 'democratic') THEN 'Democratic'
+            WHEN LOWER(TRIM(party)) IN ('lib', 'l') THEN 'Libertarian'
+            WHEN LOWER(TRIM(party)) IN ('green', 'g') THEN 'Green'
+            ELSE 'Other'
+        END AS party
+    FROM election_data
+    """)
+
     cleaned_file = final_parquet_file.replace(".parquet", "_cleaned.parquet")
-    conn.execute(f"COPY election_data TO '{cleaned_file}' (FORMAT 'parquet', COMPRESSION 'SNAPPY')")
+    conn.execute(f"COPY cleaned_election_data TO '{cleaned_file}' (FORMAT 'parquet', COMPRESSION 'SNAPPY')")
 
     conn.execute("DROP TABLE election_data")
+    conn.execute("DROP TABLE cleaned_election_data")
+
     conn.close()
 
     print(f"Saved to {cleaned_file}")
